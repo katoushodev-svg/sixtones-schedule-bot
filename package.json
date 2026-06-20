@@ -1,0 +1,26 @@
+{
+  "name": "sixtones-schedule-bot",
+  "version": "1.0.0",
+  "description": "SixTONES出演情報管理アプリ",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/katoushodev-svg/sixtones-schedule-bot.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/katoushodev-svg/sixtones-schedule-bot/issues"
+  },
+  "homepage": "https://github.com/katoushodev-svg/sixtones-schedule-bot#readme",
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "firebase-admin": "^14.0.0",
+    "playwright": "^1.61.0"
+  }
+}

@@ -1,0 +1,30 @@
+name: SixTONES Schedule Scraper
+
+on:
+  schedule:
+    # 毎日9時(JST)
+    # UTC 0時
+    - cron: "0 0 * * *"
+  workflow_dispatch:
+
+jobs:
+  scrape:
+    runs-on:
+      ubuntu-latest
+    steps:
+    - uses:
+        actions/checkout@v4
+    - uses:
+        actions/setup-node@v4
+      with:
+        node-version:
+          24
+    - run:
+        npm install
+    - run:
+        npx playwright install chromium
+    - run:
+        node src/index.js
+      env:
+        FIREBASE_KEY:
+          ${{ secrets.FIREBASE_KEY }}
