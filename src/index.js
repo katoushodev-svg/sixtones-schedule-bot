@@ -12,12 +12,13 @@ async function main() {
     let schedules = [];
     for (const month of months) {
         const data = await scrapeSixTONES(month);
+        console.log(
+            month,
+            "件数:",
+            data.length
+        );
         schedules.push(...data);
     }
-    console.log(
-        "取得件数:",
-        schedules.length
-    );
 
     for (const schedule of schedules) {
         const id = createId(schedule);
@@ -40,10 +41,19 @@ async function main() {
                     }
                 );
 
-            if(oldCompare===newCompare){
+            if (oldCompare===newCompare) {
                 console.log("変更なし:", id);
                 continue;
             }
+        }
+
+        if (schedule.members.length === 0) {
+            console.log("メンバーなし", id);
+            continue;
+        }
+
+        if (schedule.members.length > 0) {
+            schedule.members = [...new Set(schedule.members)];
         }
 
         await ref.set({
