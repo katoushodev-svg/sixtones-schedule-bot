@@ -6,7 +6,6 @@ const categories = [
     "MAGAZINE",
     "WEB",
     "RELEASE",
-    "CONCERT",
     "STAGE",
     "EVENT",
     "TICKET",
