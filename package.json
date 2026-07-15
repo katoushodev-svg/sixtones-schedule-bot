@@ -21,6 +21,7 @@
   "dependencies": {
     "dotenv": "^17.4.2",
     "firebase-admin": "^14.0.0",
+    "ical-generator": "^11.0.0",
     "playwright": "^1.61.0"
   }
 }
