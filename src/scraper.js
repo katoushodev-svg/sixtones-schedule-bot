@@ -151,11 +151,6 @@ function parseSchedule(text, month){
             let j = i + 1;
             while (j < lines.length && !categories.includes(lines[j]) && !isDateLine(lines,j)){
                 const value = lines[j];
-                // ※で始まる注意書きは無視
-                if (value.startsWith("※")) {
-                    j++;
-                    continue;
-                }
                 // 時刻
                 if (/^\d{1,2}:\d{2}[-−ー]?$/.test(value.trim())) {
                     time = value.trim().replace("-", "");
@@ -167,16 +162,14 @@ function parseSchedule(text, month){
                     value.includes(member)
                 );
                 if (matchedMembers.length > 0) {
-                    members.push(...matchedMembers);
-                    j++;
-                    continue;
+                    // 重複除去
+                    members = [...new Set(members)];
+                    // 出演者以降は注意書きのみのため、この予定の解析を終了
+                    break;
                 }
 
                 // タイトル
-                if (
-                    !title &&
-                    !value.startsWith("※")
-                ) {
+                if (!title) {
                     title = value;
                     j++;
                     continue;
