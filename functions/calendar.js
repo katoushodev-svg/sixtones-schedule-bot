@@ -161,7 +161,7 @@ function buildCalendar(scheduleItems) {
             // 1時間前通知
             event.createAlarm({
                 type: "display",
-                trigger: -60 * 60
+                trigger: 60 * 60
             });
 
         } else {
