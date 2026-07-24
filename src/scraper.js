@@ -151,6 +151,11 @@ function parseSchedule(text, month){
             let j = i + 1;
             while (j < lines.length && !categories.includes(lines[j]) && !isDateLine(lines,j)){
                 const value = lines[j];
+                // ※で始まる注意書きは無視
+                if (value.startsWith("※")) {
+                    j++;
+                    continue;
+                }
                 // 時刻
                 if (/^\d{1,2}:\d{2}[-−ー]?$/.test(value.trim())) {
                     time = value.trim().replace("-", "");
@@ -168,7 +173,10 @@ function parseSchedule(text, month){
                 }
 
                 // タイトル
-                if (!title) {
+                if (
+                    !title &&
+                    !value.startsWith("※")
+                ) {
                     title = value;
                     j++;
                     continue;
