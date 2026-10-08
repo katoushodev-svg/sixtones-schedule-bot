@@ -157,6 +157,12 @@ function parseSchedule(text, month){
                     j++;
                     continue;
                 }
+                // タイトル
+                if (!title) {
+                    title = value;
+                    j++;
+                    continue;
+                }
                 // 出演者
                 const matchedMembers = sixtonesMembers.filter(member =>
                     value.includes(member)
@@ -167,13 +173,6 @@ function parseSchedule(text, month){
                     members = [...new Set(members)];
                     // 出演者以降は注意書きのみのため、この予定の解析を終了
                     break;
-                }
-
-                // タイトル
-                if (!title) {
-                    title = value;
-                    j++;
-                    continue;
                 }
                 j++;
             }
