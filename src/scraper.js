@@ -29,185 +29,88 @@ function createUrl() {
 /**
  * 表示中の年月取得
  */
-// async function getDisplayedMonth(page){
-//     const text = await page.locator("body").innerText();
-//     const months = text.match(/\d{4}\.\d{2}/g);
-
-//     if (!months) {
-//         return null;
-//     }
-//     // 重複しているため最初を採用
-//     return months[0].replace(".", "");
-// }
-async function getDisplayedMonth(page) {
+async function getDisplayedMonth(page){
     const text = await page.locator("body").innerText();
-    const months = text.match(/\d{4}\.\d{2}/g) ?? [];
+    const months = text.match(/\d{4}\.\d{2}/g);
 
-    console.log("ページURL:", page.url());
-    console.log("年月候補:", months);
-
-    if (months.length === 0) {
+    if (!months) {
         return null;
     }
-
+    // 重複しているため最初を採用
     return months[0].replace(".", "");
 }
 
 /**
  * SixTONESスケジュール取得
  */
-// async function scrapeSixTONES(month){
-//     const browser =
-//         await chromium.launch({
-//             headless:true
-//         });
-
-//     const context =
-//         await browser.newContext({
-//             locale:"ja-JP",
-//             javaScriptEnabled:true,
-//             serviceWorkers:"block"
-//         });
-
-//     const page = await context.newPage();
-//     const URL = createUrl();
-
-//     await page.goto(
-//         URL,
-//         {
-//             waitUntil:"networkidle",
-//             timeout:60000
-//         }
-//     );
-
-//     await page.waitForTimeout(3000);
-
-//     let currentMonth = await getDisplayedMonth(page);
-//     console.log(
-//         "現在:",
-//         currentMonth,
-//         "目的:",
-//         month
-//     );
-
-//     /**
-//      * 指定月まで次月ボタンを押す
-//      */
-//     let count = 0;
-//     while(currentMonth !== month){
-//         count++;
-//         if(count > 12){
-//             throw new Error(
-//                 "月移動が12回を超えました"
-//             );
-//         }
-//         const nextButton =
-//             page.locator(
-//                 ".c-pager__page.is-next"
-//             );
-//         await nextButton.click();
-//         await page.waitForTimeout(15000);
-//         currentMonth = await getDisplayedMonth(page);
-//     }
-//     await page.waitForTimeout(60000);
-//     const text = await page.locator("body").innerText();
-//     console.log(
-//         "取得ページ:",
-//         currentMonth
-//     );
-//     console.log(
-//         "年月:",
-//         text.match(/\d{4}\.\d{2}/g)
-//     );
-//     await browser.close();
-//     return parseSchedule(
-//         text,
-//         month
-//     );
-// }
 async function scrapeSixTONES(month){
-    const browser = await chromium.launch({ headless:true });
-    const context = await browser.newContext({
-        locale:"ja-JP",
-        javaScriptEnabled:true,
-        serviceWorkers:"block"
-    });
+    const browser =
+        await chromium.launch({
+            headless:true
+        });
+
+    const context =
+        await browser.newContext({
+            locale:"ja-JP",
+            javaScriptEnabled:true,
+            serviceWorkers:"block"
+        });
 
     const page = await context.newPage();
+    const URL = createUrl();
 
-    // 通常の一覧ページを開く
-    await page.goto(createUrl(), {
-        waitUntil: "domcontentloaded",
-        timeout: 60000,
-    });
+    await page.goto(
+        URL,
+        {
+            waitUntil:"networkidle",
+            timeout:60000
+        }
+    );
 
     await page.waitForTimeout(3000);
 
     let currentMonth = await getDisplayedMonth(page);
-    let attempts = 0;
-    const maxAttempts = 12;
+    console.log(
+        "現在:",
+        currentMonth,
+        "目的:",
+        month
+    );
 
-    while (currentMonth !== month && attempts < maxAttempts) {
-        console.log("現在:", currentMonth, "目的:", month);
-
-        if (!currentMonth) {
-            throw new Error("現在の表示月を取得できません");
-        }
-
-        const pagerSelector =
-            currentMonth > month
-                ? ".c-pager__page.is-prev"
-                : ".c-pager__page.is-next";
-
-        const pager = page.locator(pagerSelector);
-
-        if (await pager.count() === 0) {
+    /**
+     * 指定月まで次月ボタンを押す
+     */
+    let count = 0;
+    while(currentMonth !== month){
+        count++;
+        if(count > 12){
             throw new Error(
-                `月移動ボタンが見つかりません: ${pagerSelector}`
+                "月移動が12回を超えました"
             );
         }
-
-        // オーバーレイによるクリック妨害を回避するため force を指定
-        await pager.first().click({
-            force: true,
-            timeout: 10000,
-        });
-
-        // カレンダーの更新を待つ
-        await page.waitForTimeout(1000);
-
-        // 予定一覧の更新を待つ
-        await page.waitForTimeout(5000);
-
-        const nextMonth = await getDisplayedMonth(page);
-
-        if (!nextMonth || nextMonth === currentMonth) {
-            throw new Error(
-                `月移動に失敗しました: ${currentMonth} → ${month}`
+        const nextButton =
+            page.locator(
+                ".c-pager__page.is-next"
             );
-        }
-
-        currentMonth = nextMonth;
-        attempts++;
+        await nextButton.click();
+        await page.waitForTimeout(15000);
+        currentMonth = await getDisplayedMonth(page);
     }
-
-    if (currentMonth !== month) {
-        throw new Error(
-            `対象月へ移動できませんでした: 現在=${currentMonth}, 対象=${month}`
-        );
-    }
-
-    console.log("対象月への移動成功:", currentMonth);
-    // 月移動後の画面が安定するまで待つ
-    await page.waitForTimeout(5000);
+    await page.waitForTimeout(60000);
     const text = await page.locator("body").innerText();
-    console.log("===== 取得ページの本文（先頭5000文字） =====");
-    console.log(text.slice(0, 5000));
-    console.log("===== 本文出力終了 =====");
-
+    console.log(
+        "取得ページ:",
+        currentMonth
+    );
+    console.log(
+        "年月:",
+        text.match(/\d{4}\.\d{2}/g)
+    );
     await browser.close();
-
-    return parseSchedule(text, month);
+    return parseSchedule(
+        text,
+        month
+    );
 }
 
 function parseSchedule(text, month){
