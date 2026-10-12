@@ -27,183 +27,274 @@ function createUrl() {
 }
 
 /**
- * 表示中の年月取得
+ * 表示中の年月を取得する
  */
-async function getDisplayedMonth(page){
+async function getDisplayedMonth(page) {
     const text = await page.locator("body").innerText();
     const months = text.match(/\d{4}\.\d{2}/g);
 
     if (!months) {
         return null;
     }
-    // 重複しているため最初を採用
+    // ページ内で重複している年月のうち、最初のものを採用する
     return months[0].replace(".", "");
 }
 
 /**
- * SixTONESスケジュール取得
+ * SixTONESのスケジュールを取得する
+ *
+ * @param {string} month 取得対象年月（YYYYMM）
+ * @returns {Promise<Array>}
  */
-async function scrapeSixTONES(month){
-    const browser =
-        await chromium.launch({
-            headless:true
+async function scrapeSixTONES(month) {
+    const browser = await chromium.launch({
+        headless: true
+    });
+
+    try {
+        const context = await browser.newContext({
+            locale: "ja-JP",
+            javaScriptEnabled: true,
+            serviceWorkers: "block"
         });
 
-    const context =
-        await browser.newContext({
-            locale:"ja-JP",
-            javaScriptEnabled:true,
-            serviceWorkers:"block"
+        const page = await context.newPage();
+
+        await page.goto(createUrl(), {
+            waitUntil: "networkidle",
+            timeout: 60000
         });
 
-    const page = await context.newPage();
-    const URL = createUrl();
+        // 初期画面の読み込みを待つ
+        await page.waitForTimeout(3000);
 
-    await page.goto(
-        URL,
-        {
-            waitUntil:"networkidle",
-            timeout:60000
+        let currentMonth = await getDisplayedMonth(page);
+
+        if (!currentMonth) {
+            throw new Error("初期表示月を取得できません");
         }
-    );
 
-    await page.waitForTimeout(3000);
-
-    let currentMonth = await getDisplayedMonth(page);
-    console.log(
-        "現在:",
-        currentMonth,
-        "目的:",
-        month
-    );
-
-    /**
-     * 指定月まで次月ボタンを押す
-     */
-    let count = 0;
-    while(currentMonth !== month){
-        count++;
-        if(count > 12){
-            throw new Error(
-                "月移動が12回を超えました"
-            );
-        }
-        const nextButton =
-            page.locator(
-                ".c-pager__page.is-next"
-            );
-        await nextButton.click();
-        await page.waitForTimeout(15000);
-        currentMonth = await getDisplayedMonth(page);
-    }
-    await page.waitForTimeout(60000);
-    const text = await page.locator("body").innerText();
-    console.log(
-        "取得ページ:",
-        currentMonth
-    );
-    console.log(
-        "年月:",
-        text.match(/\d{4}\.\d{2}/g)
-    );
-    await browser.close();
-    return parseSchedule(
-        text,
-        month
-    );
-}
-
-function parseSchedule(text, month){
-    let lines =
-        text
-        .split("\n")
-        .map(v=>v.trim())
-        .filter(Boolean);
-
-    const startIndex =
-        lines.findIndex(
-            v => /^\d{4}\.\d{2}$/.test(v)
+        console.log(
+            "現在:",
+            currentMonth,
+            "目的:",
+            month
         );
 
-    if(startIndex === -1){
+        /**
+         * 対象月まで次月ボタンで移動する
+         */
+        let count = 0;
+        const maxAttempts = 12;
+
+        while (currentMonth !== month) {
+            count++;
+
+            if (count > maxAttempts) {
+                throw new Error(
+                    `月移動が${maxAttempts}回を超えました: ` +
+                    `現在=${currentMonth}, 対象=${month}`
+                );
+            }
+
+            // 通常運用の対象月は当月以降だが、
+            // 対象月が現在より前の場合は前月ボタンを使う
+            const selector =
+                currentMonth > month
+                    ? ".c-pager__page.is-prev"
+                    : ".c-pager__page.is-next";
+
+            const pager = page.locator(selector);
+
+            if (await pager.count() === 0) {
+                throw new Error(
+                    `月移動ボタンが見つかりません: ${selector}`
+                );
+            }
+
+            const previousMonth = currentMonth;
+
+            await pager.first().click({
+                force: true,
+                timeout: 10000
+            });
+
+            // カレンダーと予定一覧の更新を待つ
+            await page.waitForTimeout(1000);
+            await page.waitForTimeout(5000);
+
+            const nextMonth = await getDisplayedMonth(page);
+
+            console.log("月移動確認:", {
+                previousMonth,
+                targetMonth: month,
+                detectedMonth: nextMonth
+            });
+
+            if (!nextMonth) {
+                throw new Error("月移動後の表示月を取得できません");
+            }
+
+            if (nextMonth === previousMonth) {
+                throw new Error(`月移動に失敗しました: ${previousMonth} → ${month}`);
+            }
+
+            currentMonth = nextMonth;
+
+            console.log(
+                "月移動:",
+                previousMonth,
+                "→",
+                currentMonth
+            );
+        }
+
+        // 取得対象月との一致を最終確認する
+        if (currentMonth !== month) {
+            throw new Error(
+                `対象月が一致しません: ` +
+                `表示=${currentMonth}, 対象=${month}`
+            );
+        }
+
+        console.log("取得対象月:", currentMonth);
+
+        // 予定一覧の描画を待つ
+        await page.waitForTimeout(5000);
+
+        const text = await page.locator("body").innerText();
+
+        const schedules = parseSchedule(text, month);
+
+        console.log(
+            "取得ページ:",
+            currentMonth,
+            "件数:",
+            schedules.length
+        );
+
+        return schedules;
+    } finally {
+        await browser.close();
+    }
+}
+
+/**
+ * ページ本文からスケジュールを解析する
+ */
+function parseSchedule(text, month) {
+    let lines = text
+        .split("\n")
+        .map(value => value.trim())
+        .filter(Boolean);
+
+    const startIndex = lines.findIndex(
+        value => /^\d{4}\.\d{2}$/.test(value)
+    );
+
+    if (startIndex === -1) {
         return [];
     }
 
     lines = lines.slice(startIndex);
+
     const results = [];
     let currentDate = null;
-    const currentYearMonth = `${month.slice(0,4)}-${month.slice(4)}`;
+
+    const currentYearMonth =
+        `${month.slice(0, 4)}-${month.slice(4)}`;
 
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
 
-        if (isDateLine(lines,i)) {
-            currentDate = `${currentYearMonth}-${line.padStart(2,"0")}`;
+        if (isDateLine(lines, i)) {
+            currentDate =
+                `${currentYearMonth}-${line.padStart(2, "0")}`;
+
             continue;
         }
 
-        if (categories.includes(line)) {
-            const category = line;
-            let time = null;
-            let title = null;
-            let station = null;
-            let members = [];
-            let j = i + 1;
-            while (j < lines.length && !categories.includes(lines[j]) && !isDateLine(lines,j)){
-                const value = lines[j];
-                // 時刻
-                if (/^\d{1,2}:\d{2}[-−ー]?$/.test(value.trim())) {
-                    time = value.trim().replace("-", "");
-                    j++;
-                    continue;
-                }
-                // タイトル
-                if (!title) {
-                    title = value;
-                    j++;
-                    continue;
-                }
-                // 出演者
-                const matchedMembers = sixtonesMembers.filter(member =>
-                    value.includes(member)
-                );
-                if (matchedMembers.length > 0) {
-                    members.push(...matchedMembers); 
-                    // 重複除去
-                    members = [...new Set(members)];
-                    // 出演者以降は注意書きのみのため、この予定の解析を終了
-                    break;
-                }
+        if (!categories.includes(line)) {
+            continue;
+        }
+
+        const category = line;
+
+        let time = null;
+        let title = null;
+        let station = null;
+        let members = [];
+
+        let j = i + 1;
+
+        while (
+            j < lines.length &&
+            !categories.includes(lines[j]) &&
+            !isDateLine(lines, j)
+        ) {
+            const value = lines[j];
+
+            // 時刻
+            if (/^\d{1,2}:\d{2}[-−ー]?$/.test(value.trim())) {
+                time = value.trim().replace("-", "");
                 j++;
+                continue;
             }
 
-            if (title && currentDate) {
-                const match = title.match(/(.*?)\s*\((.*?)\)/);
-                if (match) {
-                    title =
-                        match[1].trim();
-
-                    station =
-                        match[2].trim();
-                }
-
-                results.push({
-                    date:currentDate,
-                    category,
-                    time,
-                    title,
-                    station,
-                    members
-                });
+            // タイトル
+            if (!title) {
+                title = value;
+                j++;
+                continue;
             }
+
+            // 出演者
+            const matchedMembers = sixtonesMembers.filter(
+                member => value.includes(member)
+            );
+
+            if (matchedMembers.length > 0) {
+                members.push(...matchedMembers);
+
+                // 重複を除去
+                members = [...new Set(members)];
+
+                // 出演者以降は注意書きのみのため、この予定の解析を終了
+                break;
+            }
+
+            j++;
+        }
+
+        if (title && currentDate) {
+            const match = title.match(/(.*?)\s*\((.*?)\)/);
+
+            if (match) {
+                title = match[1].trim();
+                station = match[2].trim();
+            }
+
+            results.push({
+                date: currentDate,
+                category,
+                time,
+                title,
+                station,
+                members
+            });
         }
     }
-    return results;
 
+    return results;
 }
 
-function isDateLine(lines,i){
-    return (/^\d{1,2}$/.test(lines[i])
-        && /^\((SUN|MON|TUE|WED|THU|FRI|SAT)\)$/.test(lines[i+1]));
+/**
+ * 日付行かどうかを判定する
+ */
+function isDateLine(lines, i) {
+    return (
+        /^\d{1,2}$/.test(lines[i]) &&
+        /^\((SUN|MON|TUE|WED|THU|FRI|SAT)\)$/.test(lines[i + 1] ?? "")
+    );
 }
 module.exports = scrapeSixTONES;

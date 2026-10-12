@@ -1,7 +1,7 @@
 function getTargetMonths(){
     const months=[];
     const today=new Date();
-    for(let i = 0; i < 6; i++){
+    for(let i = 0; i < 5; i++){
         const date = new Date(
             today.getFullYear(),
             today.getMonth()+i,
